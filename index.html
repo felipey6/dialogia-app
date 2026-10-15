@@ -133,6 +133,23 @@
   .info-fold summary { font-family: var(--f-mono); font-size: 11px; color: var(--muted); cursor: pointer; padding: 8px 0; }
   .info-fold pre { font-family: var(--f-mono); font-size: 10.5px; color: var(--muted); background: var(--bg-3); padding: 12px; border-radius: 8px; overflow-x: auto; line-height: 1.6; }
 
+  /* DICCIONARIO */
+  .dict-search { margin-bottom: 14px; }
+  .dict-cats { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 2px; }
+  .cat-chip { font-family: var(--f-mono); font-size: 11.5px; padding: 8px 14px; border-radius: 100px; background: var(--bg-3); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+  .cat-chip.active { color: var(--teal); background: var(--teal-dim); border-color: rgba(5,200,200,0.4); }
+  .dict-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 10px; }
+  .dict-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .dict-word { font-family: var(--f-display); font-size: 17px; font-weight: 600; }
+  .dict-badge { font-family: var(--f-mono); font-size: 9.5px; padding: 3px 9px; border-radius: 100px; white-space: nowrap; flex-shrink: 0; }
+  .dict-badge-ready { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(5,200,200,0.35); }
+  .dict-badge-pending { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(255,176,32,0.35); }
+  .dict-note { font-size: 13px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .dict-link { font-family: var(--f-mono); font-size: 11.5px; color: var(--teal); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+  .dict-sources { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 8px; }
+  .dict-sources a { color: var(--teal); }
+  .dict-empty { font-size: 13px; color: var(--muted); padding: 20px 0; text-align: center; }
+
   a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 </style>
 </head>
@@ -227,6 +244,18 @@
     </div>
   </section>
 
+  <!-- DICCIONARIO -->
+  <section class="view" id="view-diccionario">
+    <div class="card">
+      <h2>Diccionario LSA</h2>
+      <p class="hint">Vocabulario en Lengua de Señas Argentina. Estas palabras no son inventadas: para ver el movimiento real de cada seña, cada tarjeta enlaza a diccionarios oficiales hechos junto a la comunidad sorda.</p>
+      <p class="dict-sources">Fuentes: <a href="https://www.diccionariodigitallsa.com/" target="_blank" rel="noopener">Diccionario Digital LSA (UNCuyo)</a> · <a href="https://cas.org.ar/senario-de-terminos-y-expresiones-en-lengua-de-senas-argentina-vol-2/" target="_blank" rel="noopener">Señario CAS</a></p>
+    </div>
+    <input type="text" class="text-input dict-search" id="dictSearch" placeholder="Buscar una palabra…" />
+    <div class="dict-cats" id="dictCats"></div>
+    <div id="dictList"></div>
+  </section>
+
 </main>
 
 <nav class="bottom-nav" id="bottomNav">
@@ -234,6 +263,7 @@
     <button class="tab-btn active" data-view="traducir"><span class="tab-ic" aria-hidden="true">💬</span>Traducir</button>
     <button class="tab-btn" data-view="calibrar"><span class="tab-ic" aria-hidden="true">🎚️</span>Calibrar</button>
     <button class="tab-btn" data-view="entrenar"><span class="tab-ic" aria-hidden="true">🧠</span>Entrenar</button>
+    <button class="tab-btn" data-view="diccionario"><span class="tab-ic" aria-hidden="true">📖</span>Diccionario</button>
   </div>
 </nav>
 
@@ -241,4 +271,4 @@
 
 <script src="app.js"></script>
 </body>
-</html>
+  </html>
