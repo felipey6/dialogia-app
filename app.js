@@ -288,6 +288,108 @@ async function exportDataset() {
   toast('Dataset exportado');
 }
 
+/* ---------- Diccionario LSA ----------
+   El vocabulario es intencionalmente chico para arrancar. Cada palabra
+   enlaza a un buscador acotado a diccionarios oficiales de LSA (hechos
+   junto a la comunidad sorda) en vez de inventar acá cómo es la seña. */
+const SIGN_DICTIONARY = [
+  { palabra: 'HOLA',      categoria: 'Básicas del guante', estadoGuante: 'listo',     nota: 'Saludo para arrancar una conversación.' },
+  { palabra: 'AYUDA',     categoria: 'Básicas del guante', estadoGuante: 'listo',     nota: 'Para pedir asistencia o atención urgente.' },
+  { palabra: 'SÍ',        categoria: 'Básicas del guante', estadoGuante: 'pendiente', nota: 'Afirmación.' },
+  { palabra: 'NO',        categoria: 'Básicas del guante', estadoGuante: 'pendiente', nota: 'Negación.' },
+  { palabra: 'GRACIAS',   categoria: 'Básicas del guante', estadoGuante: 'pendiente', nota: 'Agradecimiento.' },
+  { palabra: 'POR FAVOR', categoria: 'Saludos y cortesía', estadoGuante: null,        nota: 'Para pedir algo con cortesía.' },
+  { palabra: 'DE NADA',   categoria: 'Saludos y cortesía', estadoGuante: null,        nota: 'Respuesta a un agradecimiento.' },
+  { palabra: 'CHAU',      categoria: 'Saludos y cortesía', estadoGuante: null,        nota: 'Despedida informal.' },
+  { palabra: 'BUEN DÍA',  categoria: 'Saludos y cortesía', estadoGuante: null,        nota: 'Saludo por la mañana.' },
+  { palabra: 'DISCULPA',  categoria: 'Saludos y cortesía', estadoGuante: null,        nota: 'Para pedir perdón o llamar la atención de alguien.' },
+
+  { palabra: 'DOLOR',      categoria: 'Emergencias y salud', estadoGuante: null, nota: 'Para indicar que algo duele.' },
+  { palabra: 'MÉDICO',     categoria: 'Emergencias y salud', estadoGuante: null, nota: 'Para pedir o mencionar a un médico.' },
+  { palabra: 'HOSPITAL',   categoria: 'Emergencias y salud', estadoGuante: null, nota: 'Lugar de atención médica.' },
+  { palabra: 'LLAMAR',     categoria: 'Emergencias y salud', estadoGuante: null, nota: 'Para pedir que se comuniquen con alguien.' },
+  { palabra: 'EMERGENCIA', categoria: 'Emergencias y salud', estadoGuante: null, nota: 'Situación urgente.' },
+
+  { palabra: 'MAMÁ',     categoria: 'Familia', estadoGuante: null, nota: 'Madre.' },
+  { palabra: 'PAPÁ',     categoria: 'Familia', estadoGuante: null, nota: 'Padre.' },
+  { palabra: 'HERMANO',  categoria: 'Familia', estadoGuante: null, nota: 'Hermano.' },
+  { palabra: 'HERMANA',  categoria: 'Familia', estadoGuante: null, nota: 'Hermana.' },
+  { palabra: 'FAMILIA',  categoria: 'Familia', estadoGuante: null, nota: 'Familia, en general.' },
+
+  { palabra: 'UNO',    categoria: 'Números', estadoGuante: null, nota: 'Número 1.' },
+  { palabra: 'DOS',    categoria: 'Números', estadoGuante: null, nota: 'Número 2.' },
+  { palabra: 'TRES',   categoria: 'Números', estadoGuante: null, nota: 'Número 3.' },
+  { palabra: 'CUATRO', categoria: 'Números', estadoGuante: null, nota: 'Número 4.' },
+  { palabra: 'CINCO',  categoria: 'Números', estadoGuante: null, nota: 'Número 5.' },
+  { palabra: 'SEIS',   categoria: 'Números', estadoGuante: null, nota: 'Número 6.' },
+  { palabra: 'SIETE',  categoria: 'Números', estadoGuante: null, nota: 'Número 7.' },
+  { palabra: 'OCHO',   categoria: 'Números', estadoGuante: null, nota: 'Número 8.' },
+  { palabra: 'NUEVE',  categoria: 'Números', estadoGuante: null, nota: 'Número 9.' },
+  { palabra: 'DIEZ',   categoria: 'Números', estadoGuante: null, nota: 'Número 10.' },
+
+  { palabra: 'AGUA',    categoria: 'Necesidades básicas', estadoGuante: null, nota: 'Para pedir agua.' },
+  { palabra: 'COMIDA',  categoria: 'Necesidades básicas', estadoGuante: null, nota: 'Para pedir o mencionar comida.' },
+  { palabra: 'BAÑO',    categoria: 'Necesidades básicas', estadoGuante: null, nota: 'Para pedir ir al baño.' },
+  { palabra: 'DORMIR',  categoria: 'Necesidades básicas', estadoGuante: null, nota: 'Para indicar sueño o cansancio.' },
+  { palabra: 'CASA',    categoria: 'Necesidades básicas', estadoGuante: null, nota: 'Hogar, vivienda.' },
+
+  { palabra: 'BIEN',      categoria: 'Sentimientos y estado', estadoGuante: null, nota: 'Para decir que uno está bien.' },
+  { palabra: 'MAL',       categoria: 'Sentimientos y estado', estadoGuante: null, nota: 'Para decir que uno está mal.' },
+  { palabra: 'CONTENTO',  categoria: 'Sentimientos y estado', estadoGuante: null, nota: 'Alegría, buen ánimo.' },
+  { palabra: 'TRISTE',    categoria: 'Sentimientos y estado', estadoGuante: null, nota: 'Tristeza.' },
+  { palabra: 'CANSADO',   categoria: 'Sentimientos y estado', estadoGuante: null, nota: 'Cansancio.' },
+];
+let dictActiveCategory = 'Todas';
+
+function signSearchUrl(palabra) {
+  const q = `"${palabra}" seña lengua de señas argentina video`;
+  return 'https://www.google.com/search?q=' + encodeURIComponent(q);
+}
+function dictBadge(entry) {
+  if (entry.estadoGuante === 'listo') return '<span class="dict-badge dict-badge-ready">guante ✓</span>';
+  if (entry.estadoGuante === 'pendiente') return '<span class="dict-badge dict-badge-pending">guante: próximamente</span>';
+  return '';
+}
+function renderDictCats() {
+  const cats = ['Todas', ...new Set(SIGN_DICTIONARY.map(s => s.categoria))];
+  const el = document.getElementById('dictCats');
+  if (!el) return;
+  el.innerHTML = cats.map(c =>
+    `<button class="cat-chip${c === dictActiveCategory ? ' active' : ''}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`
+  ).join('');
+  el.querySelectorAll('.cat-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      dictActiveCategory = btn.dataset.cat;
+      renderDictCats();
+      renderDictList();
+    });
+  });
+}
+function renderDictList() {
+  const searchEl = document.getElementById('dictSearch');
+  const term = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  const list = SIGN_DICTIONARY.filter(s =>
+    (dictActiveCategory === 'Todas' || s.categoria === dictActiveCategory) &&
+    (term === '' || s.palabra.toLowerCase().includes(term) || s.nota.toLowerCase().includes(term))
+  );
+  const el = document.getElementById('dictList');
+  if (!el) return;
+  if (list.length === 0) {
+    el.innerHTML = '<p class="dict-empty">No hay ninguna palabra que coincida todavía.</p>';
+    return;
+  }
+  el.innerHTML = list.map(s => `
+    <div class="dict-card">
+      <div class="dict-card-top">
+        <span class="dict-word">${escapeHtml(s.palabra)}</span>
+        ${dictBadge(s)}
+      </div>
+      <p class="dict-note">${escapeHtml(s.nota)}</p>
+      <a class="dict-link" href="${signSearchUrl(s.palabra)}" target="_blank" rel="noopener">🔎 Ver la seña real</a>
+    </div>
+  `).join('');
+}
+
 /* ---------- Navegación entre vistas ---------- */
 function showView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -324,25 +426,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (Array.isArray(savedCal) && savedCal.length === 5) calibrationProfile = savedCal;
   renderFingerRows();
   renderDataset();
+  renderDictCats();
+  renderDictList();
+  document.getElementById('dictSearch').addEventListener('input', renderDictList);
 
   if (!navigator.bluetooth) {
     document.getElementById('bleHint').textContent = 'Tu navegador no soporta Bluetooth Web. Para conectar el guante real, abrí esta app en Chrome para Android.';
   }
 
-  document.getElementById('btnConnectBLE').addEventListener('click', handleConnectClick);
-  document.getElementById('btnDemoMode').addEventListener('click', handleDemoClick);
-  document.getElementById('btnRepeat').addEventListener('click', () => speak(document.getElementById('oledWord').textContent));
-  document.getElementById('autoSpeakToggle').addEventListener('change', (e) => { autoSpeak = e.target.checked; });
-  document.getElementById('btnSaveCalib').addEventListener('click', saveCalibration);
-  document.getElementById('btnResetCalib').addEventListener('click', resetCalibration);
-  document.getElementById('btnCapture').addEventListener('click', captureSample);
-  document.getElementById('btnSaveSign').addEventListener('click', saveSign);
-  document.getElementById('btnExport').addEventListener('click', exportDataset);
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => showView(btn.dataset.view));
-  });
-
-  if ('serviceWorker' in navigator) {
-    try { await navigator.serviceWorker.register('sw.js'); } catch (e) { /* opcional, no bloquea la app */ }
-  }
-});
+  document.getElementById('btnConnectBLE').addEven
