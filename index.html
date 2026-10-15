@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#060A12" />
+<title>DIALOGIA — App complementaria</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #060A12; --bg-2: #0B1524; --bg-3: #122036;
+    --teal: #05C8C8; --teal-dim: rgba(5,200,200,0.12);
+    --amber: #FFB020; --amber-dim: rgba(255,176,32,0.12);
+    --red: #E24B4A; --red-dim: rgba(226,75,74,0.12);
+    --text: #E4EBF5; --muted: #6E87A6; --border: rgba(255,255,255,0.08);
+    --f-display: 'Playfair Display', serif;
+    --f-body: 'Inter', sans-serif;
+    --f-mono: 'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--f-body);
+    line-height: 1.5; overflow-x: hidden;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+  }
+  button { font-family: inherit; cursor: pointer; }
+  input { font-family: inherit; }
+  a { color: inherit; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  .app-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: rgba(6,10,18,0.92); backdrop-filter: blur(14px); z-index: 20;
+  }
+  .app-logo { font-family: var(--f-display); font-size: 19px; font-weight: 700; font-style: italic; display: flex; align-items: center; gap: 8px; }
+  .conn-badge { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.06em; padding: 5px 10px; border-radius: 100px; border: 1px solid var(--border); }
+  .conn-ok { color: var(--teal); border-color: rgba(5,200,200,0.35); background: var(--teal-dim); }
+  .conn-demo { color: var(--amber); border-color: rgba(255,176,32,0.35); background: var(--amber-dim); }
+  .conn-off { color: var(--muted); }
+
+  main { max-width: 480px; margin: 0 auto; padding: 20px 18px 100px; min-height: calc(100vh - 60px); }
+
+  .view { display: none; }
+  .view.active { display: block; animation: fade 0.25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 16px; padding: 20px; margin-bottom: 14px; }
+  .card h2 { font-family: var(--f-display); font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .card p.hint { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+  .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 14px 20px; border-radius: 10px; font-size: 14.5px; font-weight: 600; border: none; transition: transform 0.15s; }
+  .btn:active { transform: scale(0.98); }
+  .btn-teal { background: var(--teal); color: #02100F; }
+  .btn-outline { background: transparent; color: var(--teal); border: 1.5px solid rgba(5,200,200,0.4); }
+  .btn-ghost { background: var(--bg-3); color: var(--text); }
+  .btn-sm { padding: 9px 14px; font-size: 12.5px; width: auto; }
+  .btn[disabled] { opacity: 0.45; pointer-events: none; }
+
+  /* ONBOARDING */
+  #view-onboard { text-align: center; padding-top: 12px; }
+  .onboard-glyph { font-size: 52px; margin-bottom: 18px; }
+  #view-onboard h1 { font-family: var(--f-display); font-size: 28px; font-style: italic; margin-bottom: 10px; }
+  #view-onboard p.lead { color: var(--muted); font-size: 14.5px; margin-bottom: 28px; line-height: 1.6; }
+  .onboard-actions { display: flex; flex-direction: column; gap: 10px; }
+  #onboardStatus { font-family: var(--f-mono); font-size: 12px; color: var(--amber); margin-top: 14px; min-height: 16px; }
+  #bleHint { font-size: 12px; color: var(--muted); margin-top: 18px; line-height: 1.5; }
+
+  /* TRADUCIR */
+  .oled-box { background: #020A0A; border: 1px solid rgba(5,200,200,0.25); border-radius: 12px; padding: 26px 20px; min-height: 90px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+  .oled-text { font-family: var(--f-mono); font-size: 30px; color: var(--teal); letter-spacing: 0.08em; text-align: center; word-break: break-word; }
+  .row-actions { display: flex; gap: 10px; margin-bottom: 16px; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+  .switch { position: relative; width: 42px; height: 24px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider-track { position: absolute; inset: 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 100px; transition: 0.2s; }
+  .slider-track::before { content: ''; position: absolute; height: 18px; width: 18px; left: 2px; top: 2px; background: var(--muted); border-radius: 50%; transition: 0.2s; }
+  input:checked + .slider-track { background: var(--teal-dim); border-color: rgba(5,200,200,0.4); }
+  input:checked + .slider-track::before { transform: translateX(18px); background: var(--teal); }
+
+  .mini-sensor-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 14px; }
+  .mini-bar-track { width: 100%; height: 46px; background: rgba(255,255,255,0.03); border-radius: 4px; position: relative; overflow: hidden; border: 1px solid var(--border); }
+  .mini-bar-fill { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, var(--teal), rgba(5,200,200,0.35)); transition: height 0.4s; }
+  .mini-label { font-family: var(--f-mono); font-size: 8.5px; color: var(--muted); text-align: center; margin-top: 4px; text-transform: uppercase; }
+  .meta-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .meta-chip { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .meta-chip-label { font-family: var(--f-mono); font-size: 9.5px; color: var(--muted); text-transform: uppercase; display: block; margin-bottom: 3px; }
+  .meta-chip-val { font-family: var(--f-mono); font-size: 12.5px; color: var(--teal); }
+
+  .history-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+  .chip { font-family: var(--f-mono); font-size: 11px; padding: 5px 10px; border-radius: 100px; background: var(--bg-3); border: 1px solid var(--border); color: var(--muted); }
+
+  /* CALIBRAR */
+  .finger-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .finger-row:last-child { border-bottom: none; }
+  .finger-name { width: 62px; font-size: 13px; font-weight: 500; flex-shrink: 0; }
+  .finger-bar-wrap { flex: 1; height: 8px; background: var(--bg-3); border-radius: 100px; position: relative; overflow: hidden; }
+  .finger-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--teal); border-radius: 100px; }
+  .finger-val { font-family: var(--f-mono); font-size: 11px; color: var(--muted); width: 40px; text-align: right; flex-shrink: 0; }
+  .finger-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .btn-mark { font-family: var(--f-mono); font-size: 9.5px; padding: 5px 7px; border-radius: 6px; background: var(--bg-3); border: 1px solid var(--border); color: var(--text); }
+  .cal-range { font-family: var(--f-mono); font-size: 9px; color: var(--muted); width: 62px; text-align: center; flex-shrink: 0; }
+
+  /* ENTRENAR */
+  .field-label { font-size: 12.5px; color: var(--muted); margin-bottom: 6px; display: block; }
+  .text-input { width: 100%; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px; margin-bottom: 14px; }
+  .text-input:focus { outline: none; border-color: rgba(5,200,200,0.5); }
+  .capture-status { display: flex; align-items: center; justify-content: space-between; background: var(--bg-3); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px; }
+  #pendingCount { font-family: var(--f-mono); color: var(--teal); font-weight: 600; }
+  .ds-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+  .ds-row:last-child { border-bottom: none; }
+  .ds-count { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); }
+  .muted-note { font-size: 13px; color: var(--muted); padding: 10px 0; }
+
+  .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px); background: var(--bg-3); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 11px 18px; border-radius: 100px; opacity: 0; pointer-events: none; transition: all 0.25s; z-index: 100; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(11,21,36,0.95); backdrop-filter: blur(16px); border-top: 1px solid var(--border); padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); z-index: 20; }
+  .bottom-nav-inner { max-width: 480px; margin: 0 auto; display: flex; gap: 6px; }
+  .tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none; color: var(--muted); font-size: 10.5px; padding: 6px 4px; border-radius: 10px; font-family: var(--f-body); }
+  .tab-btn .tab-ic { font-size: 19px; }
+  .tab-btn.active { color: var(--teal); background: var(--teal-dim); }
+
+  .info-fold { margin-top: 6px; }
+  .info-fold summary { font-family: var(--f-mono); font-size: 11px; color: var(--muted); cursor: pointer; padding: 8px 0; }
+  .info-fold pre { font-family: var(--f-mono); font-size: 10.5px; color: var(--muted); background: var(--bg-3); padding: 12px; border-radius: 8px; overflow-x: auto; line-height: 1.6; }
+
+  /* DICCIONARIO */
+  .dict-search { margin-bottom: 14px; }
+  .dict-cats { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 2px; }
+  .cat-chip { font-family: var(--f-mono); font-size: 11.5px; padding: 8px 14px; border-radius: 100px; background: var(--bg-3); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+  .cat-chip.active { color: var(--teal); background: var(--teal-dim); border-color: rgba(5,200,200,0.4); }
+  .dict-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 10px; }
+  .dict-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .dict-word { font-family: var(--f-display); font-size: 17px; font-weight: 600; }
+  .dict-badge { font-family: var(--f-mono); font-size: 9.5px; padding: 3px 9px; border-radius: 100px; white-space: nowrap; flex-shrink: 0; }
+  .dict-badge-ready { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(5,200,200,0.35); }
+  .dict-badge-pending { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(255,176,32,0.35); }
+  .dict-note { font-size: 13px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .dict-link { font-family: var(--f-mono); font-size: 11.5px; color: var(--teal); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+  .dict-sources { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 8px; }
+  .dict-sources a { color: var(--teal); }
+  .dict-empty { font-size: 13px; color: var(--muted); padding: 20px 0; text-align: center; }
+
+  a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<header class="app-bar">
+  <div class="app-logo"><span aria-hidden="true">🦇</span> DIALOGIA</div>
+  <span class="conn-badge conn-off" id="connBadge">○ Desconectado</span>
+</header>
+
+<main>
+
+  <!-- ONBOARDING -->
+  <section class="view active" id="view-onboard">
+    <div class="onboard-glyph" aria-hidden="true">🧤</div>
+    <h1>Conectá tu guante</h1>
+    <p class="lead">Emparejá el guante DIALOGIA por Bluetooth para calibrar sensores, traducir en vivo y entrenar nuevas señas.</p>
+    <div class="onboard-actions">
+      <button class="btn btn-teal" id="btnConnectBLE">Conectar por Bluetooth</button>
+      <button class="btn btn-outline" id="btnDemoMode">Usar modo demo (sin guante)</button>
+    </div>
+    <div id="onboardStatus"></div>
+    <div id="bleHint"></div>
+    <details class="info-fold">
+      <summary>Info técnica para el equipo de hardware</summary>
+      <pre id="bleUuids"></pre>
+    </details>
+  </section>
+
+  <!-- TRADUCIR -->
+  <section class="view" id="view-traducir">
+    <div class="card">
+      <h2>Traducción en vivo</h2>
+      <p class="hint">Lo que reconoce el guante aparece acá, igual que en la pantalla OLED.</p>
+    </div>
+    <div class="oled-box"><div class="oled-text" id="oledWord">···</div></div>
+    <div class="row-actions">
+      <button class="btn btn-outline" id="btnRepeat">🔊 Repetir en voz alta</button>
+    </div>
+    <div class="toggle-row">
+      <span>Voz automática al reconocer</span>
+      <label class="switch">
+        <input type="checkbox" id="autoSpeakToggle" checked aria-label="Activar voz automática al reconocer una seña" />
+        <span class="slider-track"></span>
+      </label>
+    </div>
+    <div class="mini-sensor-grid">
+      <div><div class="mini-bar-track"><div class="mini-bar-fill" id="tbar0" style="height:0%"></div></div><div class="mini-label">Pulgar</div></div>
+      <div><div class="mini-bar-track"><div class="mini-bar-fill" id="tbar1" style="height:0%"></div></div><div class="mini-label">Índice</div></div>
+      <div><div class="mini-bar-track"><div class="mini-bar-fill" id="tbar2" style="height:0%"></div></div><div class="mini-label">Medio</div></div>
+      <div><div class="mini-bar-track"><div class="mini-bar-fill" id="tbar3" style="height:0%"></div></div><div class="mini-label">Anular</div></div>
+      <div><div class="mini-bar-track"><div class="mini-bar-fill" id="tbar4" style="height:0%"></div></div><div class="mini-label">Meñique</div></div>
+    </div>
+    <div class="meta-chips">
+      <div class="meta-chip"><span class="meta-chip-label">IMU</span><span class="meta-chip-val" id="imuReadout">—</span></div>
+      <div class="meta-chip"><span class="meta-chip-label">Batería</span><span class="meta-chip-val" id="battReadout">—</span></div>
+    </div>
+    <div class="history-row" id="historyRow"></div>
+  </section>
+
+  <!-- CALIBRAR -->
+  <section class="view" id="view-calibrar">
+    <div class="card">
+      <h2>Calibración</h2>
+      <p class="hint">Para cada dedo: estiralo del todo y tocá "mín", después doblalo del todo y tocá "máx". Así el sistema aprende tu rango de movimiento.</p>
+    </div>
+    <div class="card" id="fingerList"></div>
+    <button class="btn btn-teal" id="btnSaveCalib" style="margin-bottom:10px;">Guardar calibración</button>
+    <button class="btn btn-ghost" id="btnResetCalib">Restablecer valores de fábrica</button>
+  </section>
+
+  <!-- ENTRENAR -->
+  <section class="view" id="view-entrenar">
+    <div class="card">
+      <h2>Entrenamiento IA</h2>
+      <p class="hint">Registrá señas nuevas para ampliar el vocabulario. Hacé la seña, capturá varias muestras y guardala con su palabra.</p>
+    </div>
+    <div class="card">
+      <label class="field-label" for="trainLabel">Palabra o frase de la seña</label>
+      <input type="text" class="text-input" id="trainLabel" placeholder="Ej: buenos días" />
+      <div class="capture-status">
+        <span>Muestras capturadas</span>
+        <span id="pendingCount">0</span>
+      </div>
+      <button class="btn btn-outline" id="btnCapture" style="margin-bottom:10px;">Capturar postura actual</button>
+      <button class="btn btn-teal" id="btnSaveSign">Guardar seña</button>
+    </div>
+    <div class="card">
+      <h2 style="font-size:16px;">Vocabulario entrenado</h2>
+      <div id="datasetList"></div>
+      <button class="btn btn-ghost" id="btnExport" style="margin-top:12px;">Exportar dataset (JSON)</button>
+    </div>
+  </section>
+
+  <!-- DICCIONARIO -->
+  <section class="view" id="view-diccionario">
+    <div class="card">
+      <h2>Diccionario LSA</h2>
+      <p class="hint">Vocabulario en Lengua de Señas Argentina. Estas palabras no son inventadas: para ver el movimiento real de cada seña, cada tarjeta enlaza a diccionarios oficiales hechos junto a la comunidad sorda.</p>
+      <p class="dict-sources">Fuentes: <a href="https://www.diccionariodigitallsa.com/" target="_blank" rel="noopener">Diccionario Digital LSA (UNCuyo)</a> · <a href="https://cas.org.ar/senario-de-terminos-y-expresiones-en-lengua-de-senas-argentina-vol-2/" target="_blank" rel="noopener">Señario CAS</a></p>
+    </div>
+    <input type="text" class="text-input dict-search" id="dictSearch" placeholder="Buscar una palabra…" />
+    <div class="dict-cats" id="dictCats"></div>
+    <div id="dictList"></div>
+  </section>
+
+</main>
+
+<nav class="bottom-nav" id="bottomNav">
+  <div class="bottom-nav-inner">
+    <button class="tab-btn active" data-view="traducir"><span class="tab-ic" aria-hidden="true">💬</span>Traducir</button>
+    <button class="tab-btn" data-view="calibrar"><span class="tab-ic" aria-hidden="true">🎚️</span>Calibrar</button>
+    <button class="tab-btn" data-view="entrenar"><span class="tab-ic" aria-hidden="true">🧠</span>Entrenar</button>
+    <button class="tab-btn" data-view="diccionario"><span class="tab-ic" aria-hidden="true">📖</span>Diccionario</button>
+  </div>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
