@@ -487,6 +487,90 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-copy]');
   if (b) copyWord(b.dataset.copy);
 });
+
+/* =====================================================================
+   v3 — Historial con fecha y hora, diccionario sin banner naranja y
+   asistente IUY (funciona sin internet, con reglas; no es un LLM)
+   ===================================================================== */
+
+/* ---------- Historial ---------- */
+let historyList = [];                       // [{w, t, ok}] el más nuevo primero
+function saveHistory() { return storeSet('dialogia_history', historyList.slice(0, 500)); }
+async function loadHistory() { historyList = (await storeGet('dialogia_history')) || []; renderHistoryView(); }
+const _handleRecognizedSign = handleRecognizedSign;
+handleRecognizedSign = function (word) {
+  _handleRecognizedSign(word);
+  if (connectionMode !== 'ble') return;     // el modo demo no ensucia el historial
+  const last = historyList[0];
+  if (last && last.w === word && Date.now() - last.t < 1200) return;
+  historyList.unshift({ w: word, t: Date.now(), ok: null });
+  saveHistory(); renderHistoryView();
+};
+function dayLabel(ts) {
+  const ini = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const d = new Date(ts), diff = Math.round((ini(new Date()) - ini(d)) / 86400000);
+  if (diff === 0) return 'Hoy';
+  if (diff === 1) return 'Ayer';
+  return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+function renderHistoryView() {
+  const el = document.getElementById('histList');
+  if (!el) return;
+  const rev = historyList.filter(h => h.ok !== null), bien = rev.filter(h => h.ok).length;
+  document.getElementById('histStats').textContent = historyList.length
+    ? `${historyList.length} señas · ` + (rev.length ? `acierto ${Math.round(bien / rev.length * 100)}% (${bien} de ${rev.length} revisadas)` : 'marcá ✓ o ✗ para medir tus aciertos')
+    : '';
+  if (!historyList.length) { el.innerHTML = '<p class="muted-note">Todavía no hay señas. Conectá el guante y empezá a señar.</p>'; return; }
+  let html = '', cur = '';
+  historyList.forEach((h, i) => {
+    const day = dayLabel(h.t);
+    if (day !== cur) { cur = day; html += `<h3 class="hist-day">${escapeHtml(day)}</h3>`; }
+    const hora = new Date(h.t).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    html += `<div class="hist-row"><div><span class="hist-word">${escapeHtml(h.w)}</span><span class="hist-time">${hora}</span></div>
+      <div class="hist-actions"><button data-hspeak="${i}" aria-label="Repetir">🔊</button>
+      <button data-hok="${i}" data-v="1" class="${h.ok === true ? 'on-ok' : ''}" aria-label="Estuvo bien">✓</button>
+      <button data-hok="${i}" data-v="0" class="${h.ok === false ? 'on-bad' : ''}" aria-label="Estuvo mal">✗</button></div></div>`;
+  });
+  el.innerHTML = html;
+}
+document.addEventListener('click', e => {
+  const sp = e.target.closest('[data-hspeak]');
+  if (sp) { speak(historyList[+sp.dataset.hspeak].w); return; }
+  const ok = e.target.closest('[data-hok]');
+  if (ok) {
+    const h = historyList[+ok.dataset.hok], v = ok.dataset.v === '1';
+    h.ok = (h.ok === v) ? null : v;
+    saveHistory(); renderHistoryView();
+  }
+});
+document.getElementById('btnHistClear').addEventListener('click', () => {
+  if (historyList.length && confirm('¿Borrar todo el historial?')) { historyList = []; saveHistory(); renderHistoryView(); }
+});
+document.getElementById('btnHistExport').addEventListener('click', () => {
+  if (!historyList.length) { toast('No hay historial para exportar'); return; }
+  const rows = historyList.map(h => {
+    const d = new Date(h.t);
+    return [d.toLocaleDateString('es-AR'), d.toLocaleTimeString('es-AR'), '"' + h.w.replace(/"/g, '""') + '"', h.ok === null ? '' : (h.ok ? 'sí' : 'no')].join(',');
+  });
+  const blob = new Blob(['\ufefffecha,hora,palabra,correcta\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'dialogia_historial.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+});
+loadHistory();
+
+/* ---------- Diccionario: sin banner naranja ---------- */
+function postureHtml(word) {
+  const k = Object.keys(datasetCache).find(w => w.toLowerCase() === word.toLowerCase());
+  if (!k) return '';
+  const S = datasetCache[k], names = ['Pu', 'Ín', 'Me', 'An', 'Mñ'];
+  const bars = names.map((n, i) => {
+    if (SIN_PULGAR && i === 0) return `<div class="pb"><div class="pb-track pb-off"></div><span>${n}</span></div>`;
+    const avg = Math.round(S.reduce((a, s) => a + rawToPercent(s.flex[i], i), 0) / S.length);
+    return `<div class="pb"><div class="pb-track"><div class="pb-fill" style="height:${avg}%"></div></div><span>${n}</span></div>`;
+  }).join('');
+  return `<div class="postura"><div class="pb-row">${bars}</div><p class="dict-sources">Postura de dedos capturada con tu guante (${S.length} muestras).</p></div>`;
+}
 function renderDictList() {
   const searchEl = document.getElementById('dictSearch');
   const term = searchEl ? searchEl.value.trim().toLowerCase() : '';
@@ -500,14 +584,79 @@ function renderDictList() {
     const img = s.img ? `<img class="dict-img" src="${escapeHtml(s.img)}" alt="Seña de ${escapeHtml(s.palabra)} en LSA" loading="lazy">` : '';
     const pasos = (s.pasos && s.pasos.length)
       ? `<ol class="dict-steps">${s.pasos.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ol>`
-      : '<p class="dict-pending">Imagen y procedimiento pendientes de validar con la comunidad sorda.</p>';
+      : `<div class="dict-howto"><b>Para que el guante la reconozca</b><ol class="dict-steps">
+          <li>Mirá cómo se hace con una persona sorda, un intérprete o el diccionario oficial.</li>
+          <li>En <b>Entrenar</b> escribí «${escapeHtml(s.palabra)}» y capturá varias muestras.</li>
+          <li>Tocá <b>Guardar seña</b>: la vas a ver en Traducir y en el Historial.</li></ol></div>`;
     const fuente = s.fuente ? `<p class="dict-sources">Fuente: ${escapeHtml(s.fuente)}</p>` : '';
     return `<div class="dict-card">
       <div class="dict-card-top"><span class="dict-word">${escapeHtml(s.palabra)}</span>${dictBadge(s)}</div>
-      <p class="dict-note">${escapeHtml(s.nota)}</p>${img}${pasos}${fuente}
-      <div class="dict-actions">
-        <a class="dict-link" href="${DICT_URL}" target="_blank" rel="noopener">📖 Diccionario oficial</a>
-        <button class="dict-link" data-copy="${escapeHtml(s.palabra)}">Copiar palabra</button>
-      </div></div>`;
+      <p class="dict-note">${escapeHtml(s.nota)}</p>${img}${postureHtml(s.palabra)}${pasos}${fuente}
+      <div class="dict-actions"><button class="dict-link" data-copy="${escapeHtml(s.palabra)}">Copiar palabra</button></div></div>`;
   }).join('');
 }
+renderDictList();
+
+/* ---------- IUY, la mascota asistente ---------- */
+const IUY_SVG = (() => {
+  const wing = '<path d="M40 54 L6 38 Q14 50 9 58 Q19 60 14 72 Q28 66 42 74 Z" fill="#9a9a9a" stroke="#111" stroke-width="2.5" stroke-linejoin="round"/><path d="M38 56 L16 48 M38 62 L18 62 M40 68 L24 70" stroke="#6f6f6f" stroke-width="1.4" fill="none"/>';
+  const ear = '<path d="M44 40 L38 12 Q50 18 57 34 Z" fill="#7d7d7d" stroke="#111" stroke-width="2.5" stroke-linejoin="round"/><path d="M46 36 L42 20 Q50 25 53 34 Z" fill="#f08a8a"/>';
+  return `<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="IUY, el murciélago asistente">
+  <g class="iuy-wl">${wing}</g><g class="iuy-wr" transform="translate(120 0) scale(-1 1)">${wing}</g>
+  ${ear}<g transform="translate(120 0) scale(-1 1)">${ear}</g>
+  <circle cx="60" cy="60" r="27" fill="#6b6b6b" stroke="#111" stroke-width="3"/>
+  <circle cx="50" cy="56" r="3.4" fill="#111"/><circle cx="70" cy="56" r="3.4" fill="#111"/>
+  <path d="M54 65 Q60 70 66 65" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round"/>
+  <path d="M55.5 66.5 L57.5 71 L59 67.5 Z M61 67.5 L62.5 71 L64.5 66.5 Z" fill="#fff" stroke="#111" stroke-width=".8"/>
+  <path d="M42 72 Q47 80 55 78 M78 72 Q73 80 65 78" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round"/></svg>`;
+})();
+const logoSpan = document.querySelector('.app-logo span');
+if (logoSpan) logoSpan.innerHTML = IUY_SVG;
+
+function iuyReply(q) {
+  const t = q.toLowerCase(), has = (...k) => k.some(x => t.includes(x));
+  if (has('hola', 'buenas', 'quién sos', 'quien sos', 'iuy')) return '¡Hola! Soy IUY, el asistente de DIALOGIA. Funciono sin internet: te explico la app, reviso tu historial y leo tus últimas palabras en voz alta.';
+  if (has('conect', 'bluetooth', 'empar', 'no aparece')) return 'Para conectar: 1) encendé el guante, 2) abrí esta app en Chrome para Android (con HTTPS), 3) tocá "Conectar por Bluetooth" y elegí DIALOGIA. Si no aparece, reiniciá el ESP32 y probá de nuevo.';
+  if (has('calibr')) return 'En Calibrar, para cada dedo: estiralo del todo y tocá "mín", después doblalo del todo y tocá "máx". Al final tocá "Guardar calibración".';
+  if (has('entren', 'muestra', 'nueva seña', 'enseñ')) return 'En Entrenar escribí la palabra, hacé la seña y tocá "Capturar postura" varias veces, cambiando un poco la mano. Después "Guardar seña". Con 5 o más muestras reconoce mejor.';
+  if (has('pulgar')) return 'El prototipo actual no tiene sensor en el pulgar, así que la app lo ignora al reconocer. Cuando lo agreguen, poné SIN_PULGAR = false en app.js.';
+  if (has('histor', 'hoy', 'dije', 'acert', 'precis', 'cómo me fue', 'como me fue')) {
+    if (!historyList.length) return 'Todavía no hay señas en el historial. Conectá el guante y empezá a señar.';
+    const hoy = historyList.filter(h => dayLabel(h.t) === 'Hoy').length;
+    const rev = historyList.filter(h => h.ok !== null), bien = rev.filter(h => h.ok).length;
+    return `Hoy dijiste ${hoy} seña${hoy === 1 ? '' : 's'}. La última fue "${historyList[0].w}".` +
+      (rev.length ? ` De las ${rev.length} que revisaste, ${bien} estaban bien (${Math.round(bien / rev.length * 100)}%).` : ' Marcá ✓ o ✗ en el Historial para medir tus aciertos.');
+  }
+  if (has('leer', 'leé', 'repet', 'voz', 'decir')) {
+    if (!historyList.length) return 'Todavía no hay nada para leer.';
+    const frase = historyList.slice(0, 5).reverse().map(h => h.w).join(' ');
+    speak(frase);
+    return 'Leyendo tus últimas palabras: ' + frase;
+  }
+  if (has('diccion', 'imagen', 'video', 'link', 'enlace')) return 'El diccionario oficial de la UNCuyo se navega por configuración manual (la forma de la mano), no escribiendo la palabra. Por eso las tarjetas no enlazan a cada seña: para ver el movimiento real conviene que te la muestre una persona sorda o un intérprete.';
+  if (has('gracias')) return '¡De nada!';
+  return 'Todavía no sé responder eso. Preguntame por: conectar el guante, calibrar, entrenar una seña, tu historial o leer tus últimas palabras.';
+}
+(function buildIuy() {
+  const fab = document.createElement('button');
+  fab.id = 'iuyFab'; fab.setAttribute('aria-label', 'Abrir a IUY, el asistente'); fab.innerHTML = IUY_SVG;
+  const panel = document.createElement('div');
+  panel.id = 'iuyPanel'; panel.hidden = true;
+  panel.innerHTML = `<div class="iuy-head"><span class="iuy-av">${IUY_SVG}</span><div><b>IUY</b><small>asistente de DIALOGIA</small></div><button id="iuyClose" aria-label="Cerrar">✕</button></div>
+    <div id="iuyLog" aria-live="polite"></div><div id="iuyChips"></div>
+    <div class="iuy-input"><input id="iuyInput" type="text" placeholder="Preguntale a IUY…" /><button id="iuySend" class="btn btn-teal btn-sm">Enviar</button></div>`;
+  document.body.append(fab, panel);
+  const log = panel.querySelector('#iuyLog'), input = panel.querySelector('#iuyInput');
+  const say = (txt, who) => { const m = document.createElement('div'); m.className = 'iuy-msg ' + who; m.textContent = txt; log.appendChild(m); log.scrollTop = log.scrollHeight; };
+  const ask = q => { if (!q.trim()) return; say(q, 'me'); say(iuyReply(q), 'bot'); input.value = ''; };
+  ['¿Cómo conecto el guante?', 'Calibrar', 'Entrenar una seña', '¿Cómo me fue hoy?', 'Leer mis últimas palabras'].forEach(c => {
+    const b = document.createElement('button'); b.textContent = c; b.addEventListener('click', () => ask(c)); panel.querySelector('#iuyChips').appendChild(b);
+  });
+  fab.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden && !log.children.length) say('¡Hola! Soy IUY. Funciono sin internet: te explico la app, reviso tu historial y leo tus últimas palabras. ¿En qué te ayudo?', 'bot');
+  });
+  panel.querySelector('#iuyClose').addEventListener('click', () => { panel.hidden = true; });
+  panel.querySelector('#iuySend').addEventListener('click', () => ask(input.value));
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') ask(input.value); });
+})();
