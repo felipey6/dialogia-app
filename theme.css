@@ -1,0 +1,30 @@
+/* DIALOGIA — tema visual v2 (se carga después del <style> de index.html) */
+:root{--bg:#070914;--bg-2:rgba(255,255,255,.045);--bg-3:rgba(255,255,255,.08);--teal:#2EE6D6;--teal-dim:rgba(46,230,214,.14);--amber:#FFC46B;--amber-dim:rgba(255,196,107,.14);--violet:#8B7CFF;--border:rgba(255,255,255,.11);--text:#EEF1FF;--muted:#8E98BD}
+body{background:radial-gradient(900px 500px at 85% -10%,rgba(139,124,255,.28),transparent 60%),radial-gradient(700px 480px at -10% 30%,rgba(46,230,214,.18),transparent 60%),radial-gradient(800px 600px at 50% 120%,rgba(255,196,107,.12),transparent 60%),var(--bg);background-attachment:fixed}
+.app-bar{background:rgba(7,9,20,.7)}
+.app-logo{background:linear-gradient(90deg,var(--teal),var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+.card,.toggle-row,.meta-chip,.dict-card{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 10px 30px -18px #000,inset 0 1px 0 rgba(255,255,255,.07)}
+.card{border-radius:20px}
+.card h2,.dict-word{background:linear-gradient(90deg,var(--text),#B9C2FF);-webkit-background-clip:text;background-clip:text;color:transparent}
+#view-onboard h1{background:linear-gradient(90deg,var(--teal),var(--violet),var(--amber));-webkit-background-clip:text;background-clip:text;color:transparent}
+.onboard-glyph{filter:drop-shadow(0 0 22px rgba(46,230,214,.5));animation:float 4s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-8px)}}
+.btn-teal{background:linear-gradient(135deg,var(--teal),#6FB6FF 60%,var(--violet));color:#05101A;box-shadow:0 10px 26px -12px var(--teal)}
+.btn-outline{border-color:rgba(46,230,214,.45);background:rgba(46,230,214,.06)}
+.conn-ok::first-letter,.conn-demo::first-letter{animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.oled-box{position:relative;overflow:hidden;background:#03110F;border-color:rgba(46,230,214,.4);box-shadow:0 0 40px -12px var(--teal),inset 0 0 30px rgba(46,230,214,.08)}
+.oled-box::after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.2) 0 1px,transparent 1px 3px)}
+.oled-text{text-shadow:0 0 14px var(--teal)}
+.mini-bar-fill{background:linear-gradient(to top,var(--teal),var(--violet))}
+.finger-bar-fill{background:linear-gradient(90deg,var(--teal),var(--violet))}
+.chip{background:var(--teal-dim);color:var(--teal);border-color:rgba(46,230,214,.25)}
+main{padding-bottom:120px}
+.toast{bottom:110px}
+.bottom-nav{left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));border:1px solid var(--border);border-radius:22px;padding:6px;background:rgba(14,17,34,.82)}
+.tab-btn.active{background:linear-gradient(135deg,var(--teal-dim),rgba(139,124,255,.18))}
+.dict-img{width:100%;border-radius:12px;margin:6px 0 10px;border:1px solid var(--border)}
+.dict-steps{margin:6px 0 12px 20px;font-size:13.5px;line-height:1.6}
+.dict-pending{font-size:12.5px;color:var(--amber);background:var(--amber-dim);border-radius:10px;padding:9px 12px;margin-bottom:12px}
+.dict-actions{display:flex;gap:8px;flex-wrap:wrap}
+.dict-actions .dict-link{background:var(--bg-3);border:1px solid var(--border);border-radius:100px;padding:7px 12px;font-family:var(--f-mono);font-size:11.5px;color:var(--teal);cursor:pointer}

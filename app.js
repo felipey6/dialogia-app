@@ -341,15 +341,6 @@ const SIGN_DICTIONARY = [
 ];
 let dictActiveCategory = 'Todas';
 
-function signSearchUrl(palabra) {
-  const q = `"${palabra}" seña lengua de señas argentina video`;
-  return 'https://www.google.com/search?q=' + encodeURIComponent(q);
-}
-function dictBadge(entry) {
-  if (entry.estadoGuante === 'listo') return '<span class="dict-badge dict-badge-ready">guante ✓</span>';
-  if (entry.estadoGuante === 'pendiente') return '<span class="dict-badge dict-badge-pending">guante: próximamente</span>';
-  return '';
-}
 function renderDictCats() {
   const cats = ['Todas', ...new Set(SIGN_DICTIONARY.map(s => s.categoria))];
   const el = document.getElementById('dictCats');
@@ -364,30 +355,6 @@ function renderDictCats() {
       renderDictList();
     });
   });
-}
-function renderDictList() {
-  const searchEl = document.getElementById('dictSearch');
-  const term = searchEl ? searchEl.value.trim().toLowerCase() : '';
-  const list = SIGN_DICTIONARY.filter(s =>
-    (dictActiveCategory === 'Todas' || s.categoria === dictActiveCategory) &&
-    (term === '' || s.palabra.toLowerCase().includes(term) || s.nota.toLowerCase().includes(term))
-  );
-  const el = document.getElementById('dictList');
-  if (!el) return;
-  if (list.length === 0) {
-    el.innerHTML = '<p class="dict-empty">No hay ninguna palabra que coincida todavía.</p>';
-    return;
-  }
-  el.innerHTML = list.map(s => `
-    <div class="dict-card">
-      <div class="dict-card-top">
-        <span class="dict-word">${escapeHtml(s.palabra)}</span>
-        ${dictBadge(s)}
-      </div>
-      <p class="dict-note">${escapeHtml(s.nota)}</p>
-      <a class="dict-link" href="${signSearchUrl(s.palabra)}" target="_blank" rel="noopener">🔎 Ver la seña real</a>
-    </div>
-  `).join('');
 }
 
 /* ---------- Navegación entre vistas ---------- */
@@ -451,3 +418,96 @@ window.addEventListener('DOMContentLoaded', async () => {
     try { await navigator.serviceWorker.register('sw.js'); } catch (e) { /* opcional, no bloquea la app */ }
   }
 });
+
+/* =====================================================================
+   v2 — reconocimiento con el dataset entrenado, pulgar sin sensor y
+   diccionario con imagen + procedimiento
+   ===================================================================== */
+const SIN_PULGAR = true;                 // el prototipo actual no tiene flex en el pulgar
+if (SIN_PULGAR) FINGER_NAMES[0] = 'Pulgar ✕';
+let datasetCache = {}, knnLast = null, knnCount = 0, knnShown = null;
+
+/* ---------- Reconocimiento k-NN (usa lo que guardaste en "Entrenar") ---------- */
+function knnVec(flex, x, y) {
+  const v = [];
+  flex.forEach((r, i) => { if (!(SIN_PULGAR && i === 0)) v.push(rawToPercent(r, i) / 100); });
+  v.push(x / 2, y / 2);
+  return v;
+}
+function knnClassify(flex, x, y) {
+  const q = knnVec(flex, x, y), cand = [];
+  for (const w in datasetCache) datasetCache[w].forEach(s => {
+    const v = knnVec(s.flex, s.imuX, s.imuY);
+    cand.push({ w, d: Math.hypot(...v.map((a, i) => a - q[i])) });
+  });
+  cand.sort((a, b) => a.d - b.d);
+  const top = cand.slice(0, 3).filter(c => c.d < 0.6);
+  if (!top.length) return null;
+  const votes = {};
+  top.forEach(c => { votes[c.w] = (votes[c.w] || 0) + 1; });
+  return Object.keys(votes).sort((a, b) => votes[b] - votes[a])[0];
+}
+function autoRecognize(flex, x, y) {
+  const w = knnClassify(flex, x, y);
+  if (w === knnLast) knnCount++; else { knnLast = w; knnCount = 1; }
+  if (knnCount === 6) { if (w && w !== knnShown) handleRecognizedSign(w); knnShown = w; }
+}
+const _updateSensorUI = updateSensorUI;
+updateSensorUI = function (raw, x, y, b) {
+  _updateSensorUI(raw, x, y, b);
+  if (connectionMode === 'ble') autoRecognize(raw, x, y);
+};
+const _renderDataset = renderDataset;
+renderDataset = async function () {
+  datasetCache = (await storeGet('dialogia_dataset')) || {};
+  await _renderDataset();
+  renderDictList();
+};
+
+/* ---------- Diccionario v2 ----------
+   Para completar una seña con contenido VALIDADO por la comunidad sorda,
+   agregá a su entrada:  img: 'img/hola.jpg',
+                         pasos: ['Paso 1…', 'Paso 2…'],
+                         fuente: 'Quién la validó / enlace'
+   Mientras no estén, la tarjeta dice "pendiente de validar". */
+const DICT_URL = 'https://www.diccionariodigitallsa.com/';
+function trainedCount(p) {
+  const k = Object.keys(datasetCache).find(w => w.toLowerCase() === p.toLowerCase());
+  return k ? datasetCache[k].length : 0;
+}
+function dictBadge(e) {
+  const n = trainedCount(e.palabra);
+  return n ? `<span class="dict-badge dict-badge-ready">entrenada · ${n}</span>`
+           : '<span class="dict-badge dict-badge-pending">sin entrenar</span>';
+}
+function copyWord(w) {
+  if (navigator.clipboard) navigator.clipboard.writeText(w).then(() => toast('Copiado: ' + w), () => toast('No se pudo copiar'));
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-copy]');
+  if (b) copyWord(b.dataset.copy);
+});
+function renderDictList() {
+  const searchEl = document.getElementById('dictSearch');
+  const term = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  const list = SIGN_DICTIONARY.filter(s =>
+    (dictActiveCategory === 'Todas' || s.categoria === dictActiveCategory) &&
+    (term === '' || s.palabra.toLowerCase().includes(term) || s.nota.toLowerCase().includes(term)));
+  const el = document.getElementById('dictList');
+  if (!el) return;
+  if (!list.length) { el.innerHTML = '<p class="dict-empty">No hay ninguna palabra que coincida todavía.</p>'; return; }
+  el.innerHTML = list.map(s => {
+    const img = s.img ? `<img class="dict-img" src="${escapeHtml(s.img)}" alt="Seña de ${escapeHtml(s.palabra)} en LSA" loading="lazy">` : '';
+    const pasos = (s.pasos && s.pasos.length)
+      ? `<ol class="dict-steps">${s.pasos.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ol>`
+      : '<p class="dict-pending">Imagen y procedimiento pendientes de validar con la comunidad sorda.</p>';
+    const fuente = s.fuente ? `<p class="dict-sources">Fuente: ${escapeHtml(s.fuente)}</p>` : '';
+    return `<div class="dict-card">
+      <div class="dict-card-top"><span class="dict-word">${escapeHtml(s.palabra)}</span>${dictBadge(s)}</div>
+      <p class="dict-note">${escapeHtml(s.nota)}</p>${img}${pasos}${fuente}
+      <div class="dict-actions">
+        <a class="dict-link" href="${DICT_URL}" target="_blank" rel="noopener">📖 Diccionario oficial</a>
+        <button class="dict-link" data-copy="${escapeHtml(s.palabra)}">Copiar palabra</button>
+      </div></div>`;
+  }).join('');
+}
