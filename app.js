@@ -105,26 +105,63 @@ function speak(text) {
 }
 
 /* ---------- Bluetooth real ---------- */
+/* Traduce un error de Web Bluetooth a un mensaje que diga EN QUÉ PASO falló y qué hacer. */
+function bleErrorMessage(e, paso) {
+  const name = (e && e.name) || '';
+  const msg = (e && e.message) || String(e);
+  if (paso === 'elegir el dispositivo' && name === 'NotFoundError') {
+    return 'No se eligió ningún dispositivo. Tocá "Conectar por Bluetooth" y elegí DIALOGIA.';
+  }
+  if (name === 'NotSupportedError' && /notificaciones/.test(paso)) {
+    return 'El guante no permite notificaciones (' + paso + '). Falta el descriptor 0x2902 (BLE2902) en el firmware: ' +
+           'cargá el firmware actualizado, reiniciá el guante y apagá/prendé el Bluetooth del celular. [' + msg + ']';
+  }
+  if (name === 'NotFoundError') {
+    return 'No se pudo ' + paso + ': el guante no tiene ese servicio/característica. ' +
+           'Revisá que cargaste el firmware correcto y apagá/prendé el Bluetooth del celular (Android guarda copia de lo viejo). [' + msg + ']';
+  }
+  return 'No se pudo ' + paso + ': ' + msg;
+}
 async function connectBLE() {
   if (!navigator.bluetooth) {
     throw new Error('Este navegador no soporta Bluetooth Web. Abrí esta app en Chrome para Android.');
   }
-  bleDevice = await navigator.bluetooth.requestDevice({
-    filters: [{ services: [BLE_SERVICE] }],
-    optionalServices: [BLE_SERVICE]
-  });
-  bleDevice.addEventListener('gattserverdisconnected', onBleDisconnected);
-  bleServer = await bleDevice.gatt.connect();
-  const service = await bleServer.getPrimaryService(BLE_SERVICE);
-  charSensor = await service.getCharacteristic(CHAR_SENSOR);
-  charSign = await service.getCharacteristic(CHAR_SIGN);
-  try { charCalib = await service.getCharacteristic(CHAR_CALIB); } catch (e) { charCalib = null; }
-  try { charCmd = await service.getCharacteristic(CHAR_CMD); } catch (e) { charCmd = null; }
+  let paso = 'elegir el dispositivo';
+  try {
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [BLE_SERVICE] }],
+      optionalServices: [BLE_SERVICE]
+    });
+    bleDevice.addEventListener('gattserverdisconnected', onBleDisconnected);
+    paso = 'conectar con el guante';
+    bleServer = await bleDevice.gatt.connect();
+    paso = 'encontrar el servicio DIALOGIA';
+    const service = await bleServer.getPrimaryService(BLE_SERVICE);
+    paso = 'encontrar la característica de sensores';
+    charSensor = await service.getCharacteristic(CHAR_SENSOR);
+    paso = 'encontrar la característica de señas';
+    charSign = await service.getCharacteristic(CHAR_SIGN);
+    try { charCalib = await service.getCharacteristic(CHAR_CALIB); } catch (e) { charCalib = null; }
+    try { charCmd = await service.getCharacteristic(CHAR_CMD); } catch (e) { charCmd = null; }
 
-  await charSensor.startNotifications();
-  charSensor.addEventListener('characteristicvaluechanged', onSensorNotify);
-  await charSign.startNotifications();
-  charSign.addEventListener('characteristicvaluechanged', onSignNotify);
+    paso = 'activar las notificaciones de sensores';
+    await charSensor.startNotifications();
+    charSensor.addEventListener('characteristicvaluechanged', onSensorNotify);
+    paso = 'activar las notificaciones de señas';
+    await charSign.startNotifications();
+    charSign.addEventListener('characteristicvaluechanged', onSignNotify);
+  } catch (e) {
+    // Si falló a mitad de camino, soltamos la conexión: si queda abierta, el guante deja de
+    // anunciarse y no vuelve a aparecer en la lista al reintentar.
+    try {
+      if (bleDevice) {
+        bleDevice.removeEventListener('gattserverdisconnected', onBleDisconnected);
+        if (bleDevice.gatt && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+      }
+    } catch (_) { /* nada que limpiar */ }
+    console.error('[BLE] falló al ' + paso, e);
+    throw new Error(bleErrorMessage(e, paso));
+  }
 
   return bleDevice.name || 'DIALOGIA';
 }
@@ -633,7 +670,7 @@ function iuyReply(q) {
     speak(frase);
     return 'Leyendo tus últimas palabras: ' + frase;
   }
-  if (has('diccion', 'imagen', 'video', 'link', 'enlace')) return 'El diccionario oficial de la UNCuyo se navega por configuración manual (la forma de la mano), no escribiendo la palabra. Por eso las tarjetas no enlazan a cada seña: para ver el movimiento real conviene que te la muestre una persona sorda o un intérprete.';
+  if (has('diccion', 'imagen', 'video', 'link', 'enlace')) return 'El diccionario oficial de la UNCuyo se navega por configuración manual (la forma de la mano), no escribiendo la palabra. Por eso las tarjetas no enlazan a cada seña: para ver el movimiento real conviene que te la muestre una persona sorda o un intérprete. Para tener una animación, grabá el movimiento con el guante en Entrenar.';
   if (has('gracias')) return '¡De nada!';
   return 'Todavía no sé responder eso. Preguntame por: conectar el guante, calibrar, entrenar una seña, tu historial o leer tus últimas palabras.';
 }
@@ -660,3 +697,88 @@ function iuyReply(q) {
   panel.querySelector('#iuySend').addEventListener('click', () => ask(input.value));
   input.addEventListener('keydown', e => { if (e.key === 'Enter') ask(input.value); });
 })();
+
+/* =====================================================================
+   v4 — Mano animada en el diccionario (sin enlaces externos)
+   La animación sale de lo que GRABA el guante: se la pide a una persona
+   sorda o a un intérprete que haga la seña con el guante puesto.
+   ===================================================================== */
+let animsCache = {};                         // { PALABRA: [{f:[5 %], x, y}, ...] }
+let handTimer = null;
+storeGet('dialogia_anims').then(a => { animsCache = a || {}; renderDictList(); });
+
+function handSvg() {
+  const fing = [
+    { i: 1, bx: 40, L: 46 }, { i: 2, bx: 54, L: 52 }, { i: 3, bx: 68, L: 46 }, { i: 4, bx: 82, L: 36 }
+  ].map(d => `<g class="fg" data-i="${d.i}" style="transform-origin:${d.bx}px 70px"><rect x="${d.bx - 6}" y="${70 - d.L}" width="12" height="${d.L}" rx="6" fill="#2EE6D6" fill-opacity=".9" stroke="#0b1524" stroke-width="2"/></g>`).join('');
+  const thumb = '<g class="fg" data-i="0" style="transform-origin:34px 104px;transform:rotate(-48deg);opacity:.35"><rect x="28" y="70" width="12" height="34" rx="6" fill="#2EE6D6" fill-opacity=".9" stroke="#0b1524" stroke-width="2"/></g>';
+  return `<svg class="hand-svg" viewBox="0 0 120 125" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Esquema de la mano">
+    <g class="hand" style="transform-origin:60px 95px">${thumb}${fing}<rect x="28" y="64" width="64" height="54" rx="20" fill="#8B7CFF" fill-opacity=".85" stroke="#0b1524" stroke-width="2"/></g></svg>`;
+}
+function setHand(svg, fr) {
+  svg.querySelectorAll('.fg').forEach(g => {
+    const i = +g.dataset.i, c = (fr.f[i] || 0) / 100;
+    if (i === 0) { if (!SIN_PULGAR) { g.style.opacity = 1; g.style.transform = `rotate(${-48 + c * 35}deg)`; } return; }
+    g.style.transform = `rotate(${(2.5 - i) * c * 6}deg) scaleY(${1 - 0.55 * c})`;
+  });
+  svg.querySelector('.hand').style.transform = `rotate(${Math.max(-60, Math.min(60, (fr.x || 0) * 35))}deg)`;
+}
+function framesFor(word) {
+  const key = k => k.toLowerCase() === word.toLowerCase();
+  const a = Object.keys(animsCache).find(key);
+  if (a && animsCache[a].length) return animsCache[a];
+  const d = Object.keys(datasetCache).find(key);
+  if (!d) return null;
+  const S = datasetCache[d];
+  return [{ f: [0, 1, 2, 3, 4].map(i => Math.round(S.reduce((s, m) => s + rawToPercent(m.flex[i], i), 0) / S.length)),
+            x: S.reduce((s, m) => s + m.imuX, 0) / S.length, y: 0 }];
+}
+function decorateHands() {
+  clearInterval(handTimer);
+  document.querySelectorAll('#dictList .dict-card').forEach(card => {
+    const word = card.querySelector('.dict-word').textContent, frames = framesFor(word);
+    if (!frames) return;
+    const old = card.querySelector('.postura'); if (old) old.remove();
+    const how = card.querySelector('.dict-howto'); if (how) how.remove();
+    const box = document.createElement('div');
+    box.className = 'hand-box';
+    box.innerHTML = handSvg() + `<p class="dict-sources">${frames.length > 1 ? 'Movimiento grabado con el guante.' : 'Postura grabada con el guante.'} Es un esquema de la mano, no la ilustración oficial de la seña.</p>` +
+      (frames.length > 1 ? '<button class="dict-link" data-replay>▶ Repetir</button>' : '');
+    card.querySelector('.dict-note').after(box);
+    const svg = box.querySelector('svg'); svg._frames = frames; svg._i = 0; setHand(svg, frames[0]);
+  });
+  const multi = [...document.querySelectorAll('.hand-box svg')].filter(s => s._frames.length > 1);
+  if (multi.length) handTimer = setInterval(() => multi.forEach(s => {
+    const n = s._frames.length; s._i = (s._i + 1) % (n + 6);
+    setHand(s, s._frames[Math.min(s._i, n - 1)]);
+  }), 100);
+}
+const _renderDictList = renderDictList;
+renderDictList = function () { _renderDictList(); decorateHands(); };
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-replay]');
+  if (b) { const s = b.closest('.hand-box').querySelector('svg'); s._i = 0; }
+});
+
+/* ---------- Grabar movimiento con el guante (2 s) ---------- */
+async function recordMotion() {
+  const label = document.getElementById('trainLabel').value.trim();
+  if (!label) { toast('Escribí una palabra primero'); return; }
+  if (!connectionMode) { toast('Conectá el guante o usá el modo demo'); return; }
+  const btn = document.getElementById('btnRecord'), frames = [];
+  btn.disabled = true;
+  await new Promise(res => {
+    const timer = setInterval(() => {
+      frames.push({ f: lastRawFlex.map((r, i) => rawToPercent(r, i)), x: lastImuX, y: lastImuY });
+      btn.textContent = `⏺ Grabando… ${(2 - frames.length * 0.1).toFixed(1)} s`;
+      if (frames.length >= 20) { clearInterval(timer); res(); }
+    }, 100);
+  });
+  animsCache[label.toUpperCase()] = frames;
+  await storeSet('dialogia_anims', animsCache);
+  btn.disabled = false; btn.textContent = '⏺ Grabar movimiento (2 s)';
+  toast(`Movimiento de "${label}" guardado`);
+  renderDictList();
+}
+document.getElementById('btnRecord').addEventListener('click', recordMotion);
+renderDictList();
