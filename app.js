@@ -10,10 +10,11 @@ document.getElementById('bleUuids').textContent =
 `Servicio BLE:      ${BLE_SERVICE}
 Char. sensores:    ${CHAR_SENSOR}   (notify, 15 bytes)
 Char. seña:        ${CHAR_SIGN}     (notify, utf-8)
-Char. calibración: ${CHAR_CALIB}    (write)
+Char. calibración: ${CHAR_CALIB}    (sin usar: el guante se calibra solo)
 Char. comando:     ${CHAR_CMD}      (write)
 
-Formato de CHAR_SENSOR (15 bytes, little-endian):
+Formato de CHAR_SENSOR (14-15 bytes, little-endian).
+Cada dedo = doblez % del guante (el de la OLED) x40.95, o sea 0..4095:
  [0-1]  pulgar  uint16
  [2-3]  índice  uint16
  [4-5]  medio   uint16
@@ -68,7 +69,8 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function rawToPercent(raw, idx) {
-  const cal = calibrationProfile[idx] || { min: 0, max: 4095 };
+  // Con el guante real el % ya viene calculado por el guante (igual a la OLED): no se recalibra acá.
+  const cal = connectionMode === 'ble' ? { min: 0, max: 4095 } : (calibrationProfile[idx] || { min: 0, max: 4095 });
   const range = Math.max(1, cal.max - cal.min);
   const pct = ((raw - cal.min) / range) * 100;
   return Math.max(0, Math.min(100, Math.round(pct)));
@@ -101,6 +103,8 @@ function speak(text) {
   const utter = new SpeechSynthesisUtterance(text);
   utter.lang = 'es-AR';
   utter.rate = 1;
+  // si no suena, el aviso dice por qué (not-allowed, language-unavailable, synthesis-failed…)
+  utter.onerror = e => { if (e.error !== 'canceled' && e.error !== 'interrupted') toast('Voz: ' + e.error); };
   window.speechSynthesis.speak(utter);
 }
 
@@ -144,6 +148,7 @@ async function connectBLE() {
     try { charCalib = await service.getCharacteristic(CHAR_CALIB); } catch (e) { charCalib = null; }
     try { charCmd = await service.getCharacteristic(CHAR_CMD); } catch (e) { charCmd = null; }
 
+    connectionMode = 'ble';   // antes de las notificaciones, para que los primeros datos ya usen el modo real
     paso = 'activar las notificaciones de sensores';
     await charSensor.startNotifications();
     charSensor.addEventListener('characteristicvaluechanged', onSensorNotify);
@@ -151,6 +156,7 @@ async function connectBLE() {
     await charSign.startNotifications();
     charSign.addEventListener('characteristicvaluechanged', onSignNotify);
   } catch (e) {
+    connectionMode = null;
     // Si falló a mitad de camino, soltamos la conexión: si queda abierta, el guante deja de
     // anunciarse y no vuelve a aparecer en la lista al reintentar.
     try {
@@ -244,7 +250,7 @@ function renderFingerRows() {
       <div class="finger-row">
         <span class="finger-name">${name}</span>
         <div class="finger-bar-wrap"><div class="finger-bar-fill" style="width:${pct}%"></div></div>
-        <span class="finger-val">${lastRawFlex[i]}</span>
+        <span class="finger-val">${pct}%</span>
         <div class="finger-actions">
           <button class="btn-mark" data-mark="min" data-i="${i}">mín</button>
           <button class="btn-mark" data-mark="max" data-i="${i}">máx</button>
@@ -292,9 +298,9 @@ async function saveSign() {
   const label = input.value.trim();
   if (!label) { toast('Escribí una palabra primero'); return; }
   if (pendingSamples.length === 0) { toast('Capturá al menos una muestra'); return; }
-  const dataset = (await storeGet('dialogia_dataset')) || {};
+  const dataset = (await storeGet('dialogia_dataset_v2')) || {};
   dataset[label] = (dataset[label] || []).concat(pendingSamples);
-  await storeSet('dialogia_dataset', dataset);
+  await storeSet('dialogia_dataset_v2', dataset);
   pendingSamples = [];
   document.getElementById('pendingCount').textContent = '0';
   input.value = '';
@@ -302,7 +308,7 @@ async function saveSign() {
   toast(`Seña "${label}" guardada`);
 }
 async function renderDataset() {
-  const dataset = (await storeGet('dialogia_dataset')) || {};
+  const dataset = (await storeGet('dialogia_dataset_v2')) || {};
   const el = document.getElementById('datasetList');
   const words = Object.keys(dataset);
   if (words.length === 0) {
@@ -314,7 +320,7 @@ async function renderDataset() {
   ).join('');
 }
 async function exportDataset() {
-  const dataset = (await storeGet('dialogia_dataset')) || {};
+  const dataset = (await storeGet('dialogia_dataset_v2')) || {};
   if (Object.keys(dataset).length === 0) { toast('No hay datos para exportar todavía'); return; }
   const blob = new Blob([JSON.stringify(dataset, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -462,32 +468,33 @@ window.addEventListener('DOMContentLoaded', async () => {
    ===================================================================== */
 const SIN_PULGAR = true;                 // el prototipo actual no tiene flex en el pulgar
 if (SIN_PULGAR) FINGER_NAMES[0] = 'Pulgar ✕';
-let datasetCache = {}, knnLast = null, knnCount = 0, knnShown = null;
+let datasetCache = {}, knnWin = [], knnShown = null;
+const TOLERANCIA = 0.7;   // margen de error al reconocer: 0.4 estricto · 0.7 normal · 1.0 muy permisivo
 
 /* ---------- Reconocimiento k-NN (usa lo que guardaste en "Entrenar") ---------- */
 function knnVec(flex, x, y) {
   const v = [];
   flex.forEach((r, i) => { if (!(SIN_PULGAR && i === 0)) v.push(rawToPercent(r, i) / 100); });
-  v.push(x / 2, y / 2);
+  v.push(x / 4, y / 4);   // la inclinación pesa poco: no debe tapar la forma de los dedos
   return v;
 }
+// Seña más parecida a lo que se hace ahora, siempre que esté dentro del margen (TOLERANCIA).
 function knnClassify(flex, x, y) {
-  const q = knnVec(flex, x, y), cand = [];
+  const q = knnVec(flex, x, y);
+  let best = null, bd = TOLERANCIA;
   for (const w in datasetCache) datasetCache[w].forEach(s => {
-    const v = knnVec(s.flex, s.imuX, s.imuY);
-    cand.push({ w, d: Math.hypot(...v.map((a, i) => a - q[i])) });
+    const v = knnVec(s.flex, s.imuX, s.imuY), d = Math.hypot(...v.map((a, i) => a - q[i]));
+    if (d < bd) { bd = d; best = w; }
   });
-  cand.sort((a, b) => a.d - b.d);
-  const top = cand.slice(0, 3).filter(c => c.d < 0.6);
-  if (!top.length) return null;
-  const votes = {};
-  top.forEach(c => { votes[c.w] = (votes[c.w] || 0) + 1; });
-  return Object.keys(votes).sort((a, b) => votes[b] - votes[a])[0];
+  return best;
 }
 function autoRecognize(flex, x, y) {
-  const w = knnClassify(flex, x, y);
-  if (w === knnLast) knnCount++; else { knnLast = w; knnCount = 1; }
-  if (knnCount === 6) { if (w && w !== knnShown) handleRecognizedSign(w); knnShown = w; }
+  knnWin.push(knnClassify(flex, x, y) || '');   // '' = ninguna seña
+  if (knnWin.length > 8) knnWin.shift();
+  const w = knnWin.find(a => knnWin.filter(b => b === a).length >= 5);   // 5 de las últimas 8 lecturas coinciden
+  if (w === undefined) return;
+  if (w && w !== knnShown) handleRecognizedSign(w);
+  knnShown = w || null;
 }
 const _updateSensorUI = updateSensorUI;
 updateSensorUI = function (raw, x, y, b) {
@@ -496,7 +503,7 @@ updateSensorUI = function (raw, x, y, b) {
 };
 const _renderDataset = renderDataset;
 renderDataset = async function () {
-  datasetCache = (await storeGet('dialogia_dataset')) || {};
+  datasetCache = (await storeGet('dialogia_dataset_v2')) || {};
   await _renderDataset();
   renderDictList();
 };

@@ -215,7 +215,7 @@
   <section class="view" id="view-calibrar">
     <div class="card">
       <h2>Calibración</h2>
-      <p class="hint">Para cada dedo: estiralo del todo y tocá "mín", después doblalo del todo y tocá "máx". Así el sistema aprende tu rango de movimiento.</p>
+      <p class="hint">Para cada dedo: estiralo del todo y tocá "mín", después doblalo del todo y tocá "máx". Así el sistema aprende tu rango de movimiento. Esto es para el modo demo: con el guante real el rango lo aprende el guante solo (abrí y cerrá la mano; para recalibrar, reinicialo) y la app muestra el mismo % que su pantallita.</p>
     </div>
     <div class="card" id="fingerList"></div>
     <button class="btn btn-teal" id="btnSaveCalib" style="margin-bottom:10px;">Guardar calibración</button>
@@ -236,6 +236,7 @@
         <span id="pendingCount">0</span>
       </div>
       <button class="btn btn-outline" id="btnCapture" style="margin-bottom:10px;">Capturar postura actual</button>
+      <button class="btn btn-outline" id="btnRecord" style="margin-bottom:10px;">⏺ Grabar movimiento (2 s)</button>
       <button class="btn btn-teal" id="btnSaveSign">Guardar seña</button>
     </div>
     <div class="card">
@@ -249,7 +250,7 @@
   <section class="view" id="view-diccionario">
     <div class="card">
       <h2>Diccionario LSA</h2>
-      <p class="hint">Vocabulario base del proyecto. El diccionario oficial de la UNCuyo no se busca escribiendo la palabra: se navega por configuración manual (la forma de la mano), por eso no hay un enlace por seña. Si una tarjeta tiene postura de dedos, es la que grabaste con tu guante.</p>
+      <p class="hint">Vocabulario base del proyecto. El diccionario oficial de la UNCuyo no se busca escribiendo la palabra: se navega por configuración manual (la forma de la mano), por eso no hay un enlace por seña. Cada tarjeta muestra una mano animada si grabaste esa seña con el guante (Entrenar → Grabar movimiento).</p>
       <p class="dict-sources">Fuentes: <a href="https://www.diccionariodigitallsa.com/" target="_blank" rel="noopener">Diccionario Digital LSA (UNCuyo)</a> · <a href="https://cas.org.ar/senario-de-terminos-y-expresiones-en-lengua-de-senas-argentina/" target="_blank" rel="noopener">Señario CAS</a></p>
     </div>
     <input type="text" class="text-input dict-search" id="dictSearch" placeholder="Buscar una palabra…" />
